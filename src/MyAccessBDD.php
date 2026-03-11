@@ -42,7 +42,7 @@ class MyAccessBDD extends AccessBDD
             case "revue" :
                 return $this->selectAllRevues();
             case "exemplaire" :
-                return $this->selectExemplairesRevue($champs);
+                return $this->selectExemplairesDocument($champs);
             case "commandedocument" :
                 return $this->selectDocumentCommande($champs);
             case "abonnement" :
@@ -112,6 +112,8 @@ class MyAccessBDD extends AccessBDD
                 return $this->updateRevue($id, $champs);
             case "commandedocument" :
                 return $this->updateCommandeDocument($id, $champs);
+            case "exemplaire" :
+                return $this->updateExemplaireDocument($id, $champs);
             default:
                 // cas général
                 return $this->updateOneTupleOneTable($table, $id, $champs);
@@ -140,6 +142,8 @@ class MyAccessBDD extends AccessBDD
                 return $this->deleteCommandeDocument($champs);
             case "abonnement":
                 return $this->deleteAbonnementRevue($champs);
+            case "exemplaire":
+                return $this->deleteExemplaireDocument($champs);
             default:
                 // cas général
                 return $this->deleteTuplesOneTable($table, $champs);
@@ -306,11 +310,11 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * récupère tous les exemplaires d'une revue
+     * récupère tous les exemplaires d'un document
      * @param array|null $champs
      * @return array|null
      */
-    private function selectExemplairesRevue(?array $champs): ?array
+    private function selectExemplairesDocument(?array $champs): ?array
     {
         if (empty($champs)) {
             return null;
@@ -318,11 +322,14 @@ class MyAccessBDD extends AccessBDD
         if (!array_key_exists('id', $champs)) {
             return null;
         }
-        $champNecessaire['id'] = $champs['id'];
-        $requete = "Select e.id, e.numero, e.dateAchat, e.photo, e.idEtat ";
-        $requete .= "from exemplaire e join document d on e.id=d.id ";
-        $requete .= "where e.id = :id ";
-        $requete .= "order by e.dateAchat DESC";
+         $champNecessaire['id'] = $champs['id'];
+
+        $requete = "SELECT e.numero, e.dateAchat, e.photo, e.idEtat, et.libelle AS libelleEtat ";
+        $requete .= "FROM exemplaire e ";
+        $requete .= "JOIN etat et ON e.idEtat = et.id ";
+        $requete .= "WHERE e.id = :id ";
+        $requete .= "ORDER BY e.dateAchat DESC";
+
         return $this->conn->queryBDD($requete, $champNecessaire);
     }
 
@@ -1341,5 +1348,157 @@ class MyAccessBDD extends AccessBDD
         $requete .= "ORDER BY a.dateFinAbonnement ASC";
 
         return $this->conn->queryBDD($requete);
+    }
+    
+    /**
+     * Met à jour une ligne d'une table avec clé(s) composée(s)
+     * @param string $nomTable Nom de la table à mettre à jour
+     * @param array $keys Tableau associatif des colonnes clés et de leurs valeurs (ex : ["id" => "123", "numero" => 1])
+     * @param array $updateFields  Tableau associatif des colonnes à mettre à jour et de leurs valeurs
+     * @return int|null 1 si succès, null sinon
+     */
+    private function updateWithCompositeKey(string $nomTable, array $keys, array $updateFields): ?int
+    {
+        // Si aucune clé ou aucun champs à modifier, on ne fait rien
+        if (empty($keys) || empty($updateFields)) {
+            return null;
+        }
+
+        //Construction de la partie SET de la requête
+        $setParts = [];
+        $parametres = [];
+        foreach ($updateFields as $colonne => $value) {
+            $setParts[] = "$colonne = :$colonne";
+            $parametres[$colonne] = $value;
+        }
+        $setSql = implode(", ", $setParts);
+
+        //Construction de la partie WHERE de la requête (clés composées)
+        $whereParts = [];
+        foreach ($keys as $colonne => $value) {
+            $whereParts[] = "$colonne = :where_$colonne";
+            $parametres["where_$colonne"] = $value;
+        }
+        $whereSql = implode(" AND ", $whereParts);
+
+        //Requête SQL finale
+        $sql = "UPDATE $nomTable SET $setSql WHERE $whereSql";
+
+        try {
+            //Execution de la requête avec les parametres
+            $result = $this->conn->queryBDD($sql, $parametres);
+            if ($result !== null) {
+                return 1;
+            } else {
+                return null;
+            }
+        } catch (Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Met à jour l'état d'un exemplaire d'un document
+     * @param string|null $id Identifiant du document
+     * @param array|null $champs Tableau associatif contenant au minimum 'numero' et 'idEtat'
+     * @return int|null 1 si succès, null sinon
+     */
+    private function updateExemplaireDocument(?string $id, ?array $champs): ?int
+    {
+        if (empty($champs) || empty($id) || !isset($champs['numero'])) {
+            return null;
+        }
+
+        $champs = array_change_key_case($champs, CASE_LOWER);
+
+        // Vérifier qu'il y a bien un idEtat à modifier
+        if (empty($champs['idetat'])) {
+            return null;
+        }
+
+        try {
+            if ($this->conn === null) {
+                return null;
+            }
+
+            // Vérifier que l'exemplaire existe
+            $verif = $this->conn->queryBDD(
+                "SELECT idEtat FROM exemplaire WHERE id = :id AND numero = :numero",
+                ["id" => $id, "numero" => $champs['numero']]
+            );
+            if (empty($verif)) {
+                return null;
+            }
+
+            $etatActuel = $verif[0]['idEtat'];
+            $nouvelEtat = $champs['idetat'];
+
+            //Pas de modification si l'état est identique
+            if ($etatActuel === $nouvelEtat) {
+                return null;
+            }
+
+            
+            $this->conn->beginTransaction();
+
+            // Mise à jour uniquement de l'état
+            $champsExemplaire = ["idEtat" => $nouvelEtat];
+
+            // Mise à jour avec clé composée (id + numero)
+            $resultat = $this->updateWithCompositeKey(
+                "exemplaire",
+                ["id" => $id, "numero" => $champs['numero']],
+                $champsExemplaire
+            );
+
+            if ($resultat === null) {
+                $this->conn->rollBack();
+                return null;
+            }
+
+            $this->conn->commit();
+            return 1;
+        } catch (Exception $e) {
+            if ($this->conn !== null) {
+                $this->conn->rollBack();
+            }
+            return null;
+        }
+    }
+    
+    /**
+     * Supprime un exemplaire d'un document
+     * @param array|null $champs Tableau associatif contenant 'id' et 'numero'
+     * @return int|null 1 si succès, null sinon
+     */
+    private function deleteExemplaireDocument(?array $champs): ?int
+    {
+        if (empty($champs) || !isset($champs["id"], $champs["numero"])) {
+            return null;
+        }
+
+        $id = $champs["id"];
+        $numero = (int) $champs["numero"];
+
+        try {
+            $this->conn->beginTransaction();
+
+            $req = $this->conn->updateBDD(
+                "DELETE FROM exemplaire WHERE id = :id AND numero = :numero",
+                ["id" => $id, "numero" => $numero]
+            );
+
+            // vérifier si au moins une ligne a été supprimée
+            if ($req === null || $req === 0) {
+                $this->conn->rollBack();
+                return null;
+            }
+
+            $this->conn->commit();
+            return 1;
+        } catch (Exception $e) {
+            $this->conn->rollBack();
+            return null;
+        }
     }
 }
