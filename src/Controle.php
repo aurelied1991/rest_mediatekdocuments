@@ -1,51 +1,57 @@
 <?php
+
 header('Content-Type: application/json');
 
 include_once("MyAccessBDD.php");
 
 /**
- * Contrôleur : reçoit et traite les demandes du point d'entrée
+ * Contrôleur principal de l'API : reçoit et traite les demandes du point d'entrée
+ * Reçoit et traite les requêtes HTTP entrantes, interagit avec la base de données
+ * via MyAccessBDD et renvoie les réponses au client au format JSON.
  */
-class Controle{
-	
+class Controle
+{
     /**
-     * 
+     * Instance de la classe d'accès à la base de données
      * @var MyAccessBDD
      */
     private $myAaccessBDD;
 
     /**
-     * constructeur : récupère l'instance d'accès à la BDD
+     * Constructeur : initialise l'accès à la base de données
      */
-    public function __construct(){
-        try{
+    public function __construct()
+    {
+        try {
             $this->myAaccessBDD = new MyAccessBDD();
-        }catch(Exception $e){
+        } catch (Exception $e) {
             $this->reponse(500, "erreur serveur");
             die();
         }
     }
 
     /**
-     * réception d'une demande de requête
-     * demande de traiter la requête puis demande d'afficher la réponse
-     * @param string $methodeHTTP
-     * @param string $table
-     * @param string|null $id
-     * @param array|null $champs
+     * Réception d'une demande de requête
+     * Demande de traiter la requête puis demande d'afficher la réponse
+     * @param string $methodeHTTP La méthode HTTP de la requête (GET, POST, PUT, DELETE)
+     * @param string $table Nom de la table cible dans la base de données
+     * @param string|null $id Identifiant optionnel pour la requête
+     * @param array|null $champs Données optionnelles à insérer ou modifier
      */
-    public function demande(string $methodeHTTP, string $table, ?string $id, ?array $champs){
+    public function demande(string $methodeHTTP, string $table, ?string $id, ?array $champs)
+    {
         $result = $this->myAaccessBDD->demande($methodeHTTP, $table, $id, $champs);
         $this->controleResult($result);
     }
 
     /**
-     * réponse renvoyée (affichée) au client au format json
-     * @param int $code code standard HTTP (200, 500, ...)
-     * @param string $message message correspondant au code
-     * @param array|int|string|null $result
+     * Envoie la réponse JSON au client
+     * @param int $code Code standard HTTP (200, 500, ...)
+     * @param string $message Message correspondant au code
+     * @param array|int|string|null $result Données à renvoyer
      */
-    private function reponse(int $code, string $message, array|int|string|null $result=""){
+    private function reponse(int $code, string $message, array|int|string|null $result = "")
+    {
         $retour = array(
             'code' => $code,
             'message' => $message,
@@ -53,26 +59,26 @@ class Controle{
         );
         echo json_encode($retour, JSON_UNESCAPED_UNICODE);
     }
-    
+
     /**
-     * contrôle si le résultat n'est pas null
-     * demande l'affichage de la réponse adéquate
+     * Vérifie le résultat de la requête et renvoie la réponse appropriée
      * @param array|int|null $result résultat de la requête
      */
-    private function controleResult(array|int|null $result) {
-        if (!is_null($result)){
+    private function controleResult(array|int|null $result)
+    {
+        if (!is_null($result)) {
             $this->reponse(200, "OK", $result);
-        }else{	
+        } else {
             $this->reponse(400, "requete invalide");
-        }        
+        }
     }
-	
+
     /**
-     * authentification incorrecte
-     * demande d'afficher un messaage d'erreur
+     * Renvoie une réponse d'authentification incorrecte.
+     * Utilisé lorsque les identifiants fournis sont invalides.
      */
-    public function unauthorized(){
+    public function unauthorized()
+    {
         $this->reponse(401, "authentification incorrecte");
     }
-    
 }

@@ -1,30 +1,32 @@
 <?php
+
 /*
  * Index.php : point d'entrée de l'API
- * - contrôle l'authentification
+ * - Initialise les objets Url et Controle
+ * - Contrôle l'authentification
  * - Récupère les variables envoyées (dans l'URL ou le body)
- * - récupère la méthode d'envoi HTTP (GET, POST, PUT, DELETE)
- * - demande au contrôleur de gérer la demande
+ * - Récupère la méthode d'envoi HTTP (GET, POST, PUT, DELETE)
+ * - Demande au contrôleur de gérer la demande
  */
 include_once ("Url.php");
 include_once("Controle.php");
 
-// crée l'objet d'accès aux informations de l'URL qui sollicite l'API
+// Création de l'instance pour accéder aux informations de l'URL
 $url = Url::getInstance();
-// crée l'objet d'accès au contrôleur
+// Création du contrôleur pour traiter les requêtes
 $controle = new Controle();
 
-// vérifie l'authentification
+// Vérifie l'authentification
 if (!$url->authentification()) {
-    // l'authentification a échoué
+    // L'authentification a échoué
     $controle->unauthorized();
 } else {
-    // récupère la méthode HTTP utilisée pour accéder à l'API
+    // Récupère la méthode HTTP utilisée pour accéder à l'API
     $methodeHTTP = $url->recupMethodeHTTP();
-    //récupère les données passées dans l'url (visibles ou cachées)
+    //Récupère les données passées dans l'url (visibles ou cachées)
     $table = $url->recupVariable("table");
     $id = $url->recupVariable("id");
     $champs = $url->recupVariable("champs", "json");
-    // demande au controleur de traiter la demande
+    // Demande au controleur de traiter la demande
     $controle->demande($methodeHTTP, $table, $id, $champs);
 }

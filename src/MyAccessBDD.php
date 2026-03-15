@@ -3,33 +3,37 @@
 include_once("AccessBDD.php");
 
 /**
- * Classe de construction des requêtes SQL
- * hérite de AccessBDD qui contient les requêtes de base
- * Pour ajouter une requête :
- * - créer la fonction qui crée une requête (prendre modèle sur les fonctions
- *   existantes qui ne commencent pas par 'traitement')
- * - ajouter un 'case' dans un des switch des fonctions redéfinies
- * - appeler la nouvelle fonction dans ce 'case'
+ * Classe de construction des requêtes SQL et d'accès aux données spécifique à l'application MediatekDocuments.
+ * Cette classe hérite de AccessBDD et implémente les méthodes permettant
+ * de construire et exécuter les requêtes SQL pour les différentes entités
+ * de l'application
+ * Elle gère également certaines règles métier et utilise des transactions
+ * afin de garantir l'intégrité des données lors des opérations complexes.
  */
 class MyAccessBDD extends AccessBDD
 {
     /**
-     * constructeur qui appelle celui de la classe mère
+     * Constructeur de la classe MyAccessBDD
+     * Initialise l'accès à la base de données en appelant
+     * le constructeur de la classe mère AccessBDD.
      */
     public function __construct()
     {
         try {
             parent::__construct();
         } catch (\Exception $e) {
+            error_log($e->getMessage());
             throw $e;
         }
     }
 
     /**
-     * demande de recherche
-     * @param string $table
-     * @param array|null $champs nom et valeur de chaque champ
-     * @return array|null tuples du résultat de la requête ou null si erreur
+     * Traite une requête SELECT (recherche)
+     * Selon la table demandée, appelle la méthode correspondante
+     * permettant de récupérer les données.
+     * @param string $table Nom de la table à interroger
+     * @param array|null $champs Paramètres éventuels de filtrage
+     * @return array|null Résultat de la requête ou null en cas d'erreur
      * @override
      */
     protected function traitementSelect(string $table, ?array $champs): ?array
@@ -56,7 +60,6 @@ class MyAccessBDD extends AccessBDD
                 // select portant sur une table contenant juste id et libelle
                 return $this->selectTableSimple($table);
             case "" :
-            // return $this->uneFonction(parametres);
             default:
                 // cas général
                 return $this->selectTuplesOneTable($table, $champs);
@@ -64,17 +67,18 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * demande d'ajout (insert)
-     * @param string $table
-     * @param array|null $champs nom et valeur de chaque champ
-     * @return int|null nombre de tuples ajoutés ou null si erreur
+     * Traite une requête INSERT (demande d'ajout)
+     * Selon la table ciblée, appelle la méthode spécifique
+     * permettant d'insérer les données dans la base.
+     * @param string $table Nom de la table
+     * @param array|null $champs Données à insérer
+     * @return int|null Nombre de lignes insérées ou null en cas d'erreur
      * @override
      */
     protected function traitementInsert(string $table, ?array $champs): ?int
     {
         switch ($table) {
             case "" :
-            // return $this->uneFonction(parametres);
             case "livre" :
                 return $this->insertLivre($champs);
             case "dvd" :
@@ -92,18 +96,19 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * demande de modification (update)
-     * @param string $table
-     * @param string|null $id
-     * @param array|null $champs nom et valeur de chaque champ
-     * @return int|null nombre de tuples modifiés ou null si erreur
+     * Traite une requête UPDATE (demande de modification)
+     * Selon la table ciblée, appelle la méthode correspondante
+     * permettant de modifier les données existantes.
+     * @param string $table Nom de la table
+     * @param string|null $id Identifiant de l'enregistrement à modifier
+     * @param array|null $champs Données à modifier
+     * @return int|null Nombre de lignes modifiées ou null en cas d'erreur
      * @override
      */
     protected function traitementUpdate(string $table, ?string $id, ?array $champs): ?int
     {
         switch ($table) {
             case "" :
-            // return $this->uneFonction(parametres);
             case "livre" :
                 return $this->updateLivre($id, $champs);
             case "dvd" :
@@ -121,17 +126,18 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * demande de suppression (delete)
-     * @param string $table
-     * @param array|null $champs nom et valeur de chaque champ
-     * @return int|null nombre de tuples supprimés ou null si erreur
+     * Traite une requête DELETE (demande de suppression)
+     * Selon la table ciblée, appelle la méthode spécifique
+     * permettant de supprimer les données.
+     * @param string $table Nom de la table
+     * @param array|null $champs Critères de suppression
+     * @return int|null Nombre de lignes supprimées ou null en cas d'erreur
      * @override
      */
     protected function traitementDelete(string $table, ?array $champs): ?int
     {
         switch ($table) {
             case "" :
-            // return $this->uneFonction(parametres);
             case "livre":
                 return $this->deleteLivre($champs);
             case "dvd":
@@ -151,34 +157,39 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * récupère les tuples d'une seule table
-     * @param string $table
-     * @param array|null $champs
-     * @return array|null
+     * Récupère un ou plusieurs enregistrements d'une seule table.
+     * Si aucun champ n'est fourni, tous les enregistrements de la table
+     * sont retournés. Sinon, une clause WHERE est construite dynamiquement
+     * à partir des champs fournis.
+     * @param string $table Nom de la table à interroger
+     * @param array|null $champs Critères de recherche (clé = colonne, valeur = filtre)
+     * @return array|null Liste des enregistrements trouvés ou null en cas d'erreur
      */
     private function selectTuplesOneTable(string $table, ?array $champs): ?array
     {
         if (empty($champs)) {
-            // tous les tuples d'une table
+            // Tous les tuples d'une table
             $requete = "select * from $table;";
             return $this->conn->queryBDD($requete);
         } else {
-            // tuples spécifiques d'une table
+            // Tuples spécifiques d'une table
             $requete = "select * from $table where ";
             foreach ($champs as $key => $value) {
                 $requete .= "$key=:$key and ";
             }
-            // (enlève le dernier and)
+            // Enlève le dernier and
             $requete = substr($requete, 0, strlen($requete) - 5);
             return $this->conn->queryBDD($requete, $champs);
         }
     }
 
     /**
-     * demande d'ajout (insert) d'un tuple dans une table
-     * @param string $table
-     * @param array|null $champs
-     * @return int|null nombre de tuples ajoutés (0 ou 1) ou null si erreur
+     * Insère un enregistrement dans une table.
+     * La requête INSERT est construite dynamiquement à partir
+     * des champs fournis en paramètre.
+     * @param string $table Nom de la table dans laquelle insérer les données
+     * @param array|null $champs Données à insérer (clé = colonne, valeur = donnée)
+     * @return int|null Nombre de lignes insérées (0 ou 1) ou null en cas d'erreur
      */
     private function insertOneTupleOneTable(string $table, ?array $champs): ?int
     {
@@ -190,24 +201,27 @@ class MyAccessBDD extends AccessBDD
         foreach ($champs as $key => $value) {
             $requete .= "$key,";
         }
-        // (enlève la dernière virgule)
+        // Enlève la dernière virgule
         $requete = substr($requete, 0, strlen($requete) - 1);
         $requete .= ") values (";
         foreach ($champs as $key => $value) {
             $requete .= ":$key,";
         }
-        // (enlève la dernière virgule)
+        
         $requete = substr($requete, 0, strlen($requete) - 1);
         $requete .= ");";
         return $this->conn->updateBDD($requete, $champs);
     }
 
     /**
-     * demande de modification (update) d'un tuple dans une table
-     * @param string $table
-     * @param string\null $id
-     * @param array|null $champs
-     * @return int|null nombre de tuples modifiés (0 ou 1) ou null si erreur
+     * Modifie un enregistrement dans une table
+     * La requête UPDATE est construite dynamiquement à partir
+     * des champs fournis. L'enregistrement à modifier est identifié
+     * grâce à son identifiant.
+     * @param string $table Nom de la table à modifier
+     * @param string\null $id Identifiant de l'enregistrement
+     * @param array|null $champs Champs à mettre à jour
+     * @return int|null Nombre de lignes modifiées (0 ou 1) ou null en cas d'erreur
      */
     private function updateOneTupleOneTable(string $table, ?string $id, ?array $champs): ?int
     {
@@ -217,12 +231,12 @@ class MyAccessBDD extends AccessBDD
         if (is_null($id)) {
             return null;
         }
-        // construction de la requête
+        // Construction de la requête
         $requete = "update $table set ";
         foreach ($champs as $key => $value) {
             $requete .= "$key=:$key,";
         }
-        // (enlève la dernière virgule)
+        // Enlève la dernière virgule
         $requete = substr($requete, 0, strlen($requete) - 1);
         $champs["id"] = $id;
         $requete .= " where id=:id;";
@@ -230,30 +244,34 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * demande de suppression (delete) d'un ou plusieurs tuples dans une table
-     * @param string $table
-     * @param array|null $champs
-     * @return int|null nombre de tuples supprimés ou null si erreur
+     * Supprime un ou plusieurs enregistrements d'une table.
+     * La clause WHERE est construite dynamiquement à partir
+     * des champs fournis en paramètre.
+     * @param string $table Nom de la table
+     * @param array|null $champs Critères de suppression
+     * @return int|null Nombre de lignes supprimées ou null en cas d'erreur
      */
     private function deleteTuplesOneTable(string $table, ?array $champs): ?int
     {
         if (empty($champs)) {
             return null;
         }
-        // construction de la requête
+        // Construction de la requête
         $requete = "delete from $table where ";
         foreach ($champs as $key => $value) {
             $requete .= "$key=:$key and ";
         }
-        // (enlève le dernier and)
+        // Enlève le dernier and
         $requete = substr($requete, 0, strlen($requete) - 5);
         return $this->conn->updateBDD($requete, $champs);
     }
 
     /**
-     * récupère toutes les lignes d'une table simple (qui contient juste id et libelle)
-     * @param string $table
-     * @return array|null
+     * Récupère les enregistrements d'une table simple.
+     * Cette méthode est utilisée pour les tables contenant uniquement un identifiant
+     * et un libellé (ex : genre, public, rayon).
+     * @param string $table Nom de la table
+     * @return array|null Liste des enregistrements triés par libellé
      */
     private function selectTableSimple(string $table): ?array
     {
@@ -262,8 +280,8 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * récupère toutes les lignes de la table Livre et les tables associées
-     * @return array|null
+     * Récupère toutes les lignes de la table Livre et les tables associées
+     * @return array|null Liste des livres avec leurs informations
      */
     private function selectAllLivres(): ?array
     {
@@ -278,8 +296,8 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * récupère toutes les lignes de la table DVD et les tables associées
-     * @return array|null
+     * Récupère toutes les lignes de la table DVD et les tables associées
+     * @return array|null Liste des DVD avec leurs informations
      */
     private function selectAllDvd(): ?array
     {
@@ -294,8 +312,8 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * récupère toutes les lignes de la table Revue et les tables associées
-     * @return array|null
+     * Récupère toutes les lignes de la table Revue et les tables associées
+     * @return array|null Liste des revues avec leurs informations
      */
     private function selectAllRevues(): ?array
     {
@@ -310,9 +328,11 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * récupère tous les exemplaires d'un document
-     * @param array|null $champs
-     * @return array|null
+     * Récupère tous les exemplaires d'un document
+     * Les exemplaires sont triés par date d'achat décroissante
+     * et incluent l'état de chaque exemplaire.
+     * @param array|null $champs Doit contenir l'identifiant du document (id)
+     * @return array|null Liste des exemplaires du document ou null si erreur
      */
     private function selectExemplairesDocument(?array $champs): ?array
     {
@@ -322,7 +342,7 @@ class MyAccessBDD extends AccessBDD
         if (!array_key_exists('id', $champs)) {
             return null;
         }
-         $champNecessaire['id'] = $champs['id'];
+        $champNecessaire['id'] = $champs['id'];
 
         $requete = "SELECT e.numero, e.dateAchat, e.photo, e.idEtat, et.libelle AS libelleEtat ";
         $requete .= "FROM exemplaire e ";
@@ -335,13 +355,14 @@ class MyAccessBDD extends AccessBDD
 
     /**
      * Insère un nouveau livre dans la bdd en respectant l'héritage des tables
-     * Opération réalisée dans une transaction pour la sécurité des données
-     * @param array|null $champs Données du livre
-     * @return int|null 1 si succès, null si non
+     * L'opération est réalisée dans une transaction afin de garantir
+     * l'intégrité des données en cas d'erreur lors d'une des insertions.
+     * @param array|null $champs Données du livre à insérer
+     * @return int|null 1 si l'insertion est réussie, null en cas d'échec
      */
     private function insertLivre(?array $champs): ?int
     {
-        //Vérifier que les données sont présentes
+        // Vérifie que les données sont présentes
         if (empty($champs)) {
             return null;
         }
@@ -425,8 +446,8 @@ class MyAccessBDD extends AccessBDD
     /**
      * Insère un nouveau dvd dans la bdd en respectant l'héritage des tables
      * Opération réalisée dans une transaction pour la sécurité des données
-     * @param array|null $champs
-     * @return int|null
+     * @param array|null $champs Données du DVD à insérer
+     * @return int|null 1 si l'insertion est réussie, null en cas d'échec
      */
     private function insertDvd(?array $champs): ?int
     {
@@ -434,7 +455,6 @@ class MyAccessBDD extends AccessBDD
             return null;
         }
         $champs = array_change_key_case($champs, CASE_LOWER);
-        // Contrôle des champs obligatoires
         if (
                 empty($champs["id"]) ||
                 empty($champs["titre"]) ||
@@ -460,8 +480,7 @@ class MyAccessBDD extends AccessBDD
                 $this->conn->rollback();
                 return null;
             }
-            // Découpages des données par niveau d'héritage
-            // Données communes à tous les documents
+
             $champsDocument = [
                 "id" => $champs["id"],
                 "titre" => $champs["titre"] ?? "",
@@ -471,7 +490,6 @@ class MyAccessBDD extends AccessBDD
                 "idRayon" => $champs["idrayon"]
             ];
 
-            // Table intermédiaire liés à l'héritage (livres_dvd)
             $champsLivreDvd = [
                 "id" => $champs["id"]
             ];
@@ -482,11 +500,11 @@ class MyAccessBDD extends AccessBDD
                 "realisateur" => $champs["realisateur"] ?? "",
                 "duree" => $champs["duree"] ?? ""
             ];
-            // Insertion dans chaque table concernée
+            
             $reqDoc = $this->insertOneTupleOneTable("document", $champsDocument);
             $reqLivreDvd = $this->insertOneTupleOneTable("livres_dvd", $champsLivreDvd);
             $reqDvd = $this->insertOneTupleOneTable("dvd", $champsDvd);
-            // Vérification des inserts
+
             if (
                     empty($reqDoc) ||
                     empty($reqLivreDvd) ||
@@ -499,7 +517,6 @@ class MyAccessBDD extends AccessBDD
             $this->conn->commit();
             return 1;
         } catch (Exception $ex) {
-            // En cas d'exception, annulation de la transaction
             $this->conn->rollBack();
         }
         return null;
@@ -508,8 +525,8 @@ class MyAccessBDD extends AccessBDD
     /**
      * Insère une nouvelle revue dans la bdd en respectant l'héritage des tables
      * Opération réalisée dans une transaction pour la sécurité des données
-     * @param array|null $champs
-     * @return int|null
+     * @param array|null $champs Données de la revue à insérer
+     * @return int|null 1 si l'insertion est réussie, null en cas d'échec
      */
     private function insertRevue(?array $champs): ?int
     {
@@ -517,7 +534,6 @@ class MyAccessBDD extends AccessBDD
             return null;
         }
         $champs = array_change_key_case($champs, CASE_LOWER);
-        // Contrôle des champs obligatoires
         if (
                 empty($champs["id"]) ||
                 empty($champs["titre"]) ||
@@ -542,8 +558,7 @@ class MyAccessBDD extends AccessBDD
                 $this->conn->rollback();
                 return null;
             }
-            // Découpages des données par niveau d'héritage
-            // Données communes à tous les documents
+            
             $champsDocument = [
                 "id" => $champs["id"],
                 "titre" => $champs["titre"] ?? "",
@@ -558,10 +573,9 @@ class MyAccessBDD extends AccessBDD
                 "periodicite" => $champs["periodicite"] ?? "",
                 "delaimiseadispo" => $champs["delaimiseadispo"] ?? "",
             ];
-            // Insertion dans chaque table concernée
+
             $reqDoc = $this->insertOneTupleOneTable("document", $champsDocument);
             $reqRevue = $this->insertOneTupleOneTable("revue", $champsRevue);
-            // Vérification des inserts
             if (
                     empty($reqDoc) ||
                     empty($reqRevue)
@@ -572,7 +586,6 @@ class MyAccessBDD extends AccessBDD
             $this->conn->commit();
             return 1;
         } catch (Exception $ex) {
-            // En cas d'exception, annulation de la transaction
             $this->conn->rollBack();
         }
         return null;
@@ -580,9 +593,9 @@ class MyAccessBDD extends AccessBDD
 
     /**
      * Met à jour un livre existant dans la bdd
-     * @param string|null $id
-     * @param array|null $champs
-     * @return int|null
+     * @param string|null $id Identifiant du livre à modifier
+     * @param array|null $champs Données mises à jour du livre
+     * @return int|null 1 si la mise à jour est réussie, null en cas d'échec
      */
     private function updateLivre(?string $id, ?array $champs): ?int
     {
@@ -642,10 +655,10 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * Met à jour un Dvd dans la bdd
-     * @param string|null $id
-     * @param array|null $champs
-     * @return int|null
+     * Met à jour un DVD existant dans la base de données.
+     * @param string|null $id Identifiant du DVD à modifier
+     * @param array|null $champs Données mises à jour du DVD
+     * @return int|null 1 si la mise à jour est réussie, null en cas d'échec
      */
     private function updateDvd(?string $id, ?array $champs): ?int
     {
@@ -710,10 +723,10 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * Met à jour une revue dans la bdd
-     * @param string|null $id
-     * @param array|null $champs
-     * @return int|null
+     * Met à jour une revue existante dans la base de données
+     * @param string|null $id Identifiant de la revue à modifier
+     * @param array|null $champs Données mises à jour de la revue
+     * @return int|null 1 si la mise à jour est réussie, null en cas d'échec
      */
     private function updateRevue(?string $id, ?array $champs): ?int
     {
@@ -749,7 +762,6 @@ class MyAccessBDD extends AccessBDD
             }
             $this->conn->beginTransaction();
 
-            // Données table document (SANS id)
             $champsDocument = [
                 "titre" => $champs["titre"],
                 "image" => $champs["image"] ?? "",
@@ -757,15 +769,15 @@ class MyAccessBDD extends AccessBDD
                 "idPublic" => $champs["idpublic"],
                 "idRayon" => $champs["idrayon"]
             ];
-            // Données table livre
+            
             $champsRevue = [
                 "periodicite" => $champs["periodicite"] ?? "",
                 "delaimiseadispo" => $champs["delaimiseadispo"] ?? "",
             ];
-            // Updates
+            
             $reqDoc = $this->updateOneTupleOneTable("document", $id, $champsDocument);
             $reqRevue = $this->updateOneTupleOneTable("revue", $id, $champsRevue);
-            // Vérification
+            
             if ($reqDoc === null || $reqRevue === null) {
                 $this->conn->rollback();
                 return null;
@@ -780,8 +792,9 @@ class MyAccessBDD extends AccessBDD
 
     /**
      * Supprime un livre de la bdd s'il n'y a aucune dépendance (exemplaire ou commande)
-     * @param array|null $champs
-     * @return int|null
+     * Suppressions effectuées dans l'ordre des tables héritées
+     * @param array|null $champs Doit contenir l'identifiant du livre à supprimer
+     * @return int|null 1 si la suppression est réussie, null en cas d'échec
      */
     private function deleteLivre(?array $champs): ?int
     {
@@ -841,8 +854,8 @@ class MyAccessBDD extends AccessBDD
 
     /**
      * Supprime un dvd de la bdd s'il n'y a aucune dépendance (exemplaire ou commande)
-     * @param array|null $champs
-     * @return int|null
+     * @param array|null $champs Doit contenir l'identifiant du DVD à supprimer
+     * @return int|null 1 si la suppression est réussie, null en cas d'échec
      */
     private function deleteDvd(?array $champs): ?int
     {
@@ -895,9 +908,9 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * Supprime un dvd de la bdd s'il n'y a aucune dépendance (exemplaire ou commande)
-     * @param array|null $champs
-     * @return int|null
+     * Supprime une revue de la base de données s'il n'y a aucune dépendance (exemplaire ou commande)
+     * @param array|null $champs Doit contenir l'identifiant de la revue à supprimer
+     * @return int|null 1 si la suppression est réussie, null en cas d'échec
      */
     private function deleteRevue(?array $champs): ?int
     {
@@ -949,9 +962,9 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * Récupère la liste des commandes associées à un livre ou à un dvd
-     * @param array|null $champs Tableau contenant l'identifiant 'idLivreDvd'
-     * @return array|null Liste des commandes ou null si paramètre invalide
+     * Récupère la liste des commandes associées à un document (livre ou DVD)
+     * @param array|null $champs Tableau contenant l'identifiant du document 'idLivreDvd'
+     * @return array|null Liste des commandes associées au document ou null si paramètre invalide
      */
     private function selectDocumentCommande(?array $champs): ?array
     {
@@ -979,9 +992,9 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * Insère une commande à un document (livre ou dvd)
-     * @param array|null $champs Données nécessaires à l'insertion
-     * @return int|null Retourne 1 en cas de réussite, null en cas d'échec
+     * Insère une commande associée à un document (livre ou DVD)
+     * @param array|null $champs Données nécessaires à l'insertion de la commande
+     * @return int|null 1 si l'insertion est réussie, null en cas d'échec
      */
     private function insertCommandeDocument(?array $champs): ?int
     {
@@ -1049,10 +1062,10 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * Met à jour l'état de suivi d'une commande
+     * Met à jour l'état de suivi d'une commande de document en respectant les règles métier
      * @param string|null $id Identifiant de la commande
-     * @param array|null $champs Données contenant le nouvel état
-     * @return int|null Retourne 1 en cas de réussite, null en cas d'échec
+     * @param array|null $champs Données contenant le nouvel état de suivi
+     * @return int|null 1 si la mise à jour est réussie, null en cas d'échec
      */
     private function updateCommandeDocument(?string $id, ?array $champs): ?int
     {
@@ -1130,9 +1143,10 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * Supprime la commande d'une document
+     * Supprime une commande associée à un document.
+     * Autorisée uniquement si la commande n'est pas livrée ou réglée.
      * @param array|null $champs Tableau contenant l'identifiant de la commande à supprimer
-     * @return int|null Retourne 1 en cas de réussite, null en cas d'échec
+     * @return int|null 1 si la suppression est réussie, null en cas d'échec
      */
     private function deleteCommandeDocument(?array $champs): ?int
     {
@@ -1189,9 +1203,11 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * Retourne la liste des commandes d'une revue (abonnements)
-     * @param array|null $champs
-     * @return array|null
+     * Récupère la liste des commandes d'abonnement associées à une revue.
+     * La méthode retourne les informations de commande ainsi que
+     * la date de fin d'abonnement correspondante.
+     * @param array|null $champs Tableau contenant l'identifiant de la revue (idRevue)
+     * @return array|null Liste des commandes d'abonnement ou null si paramètre invalide
      */
     private function selectCommandesRevue(?array $champs): ?array
     {
@@ -1217,9 +1233,9 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * Insère un abonnement à une revue
-     * @param array|null $champs
-     * @return int|null Retourne 1 en cas de réussite, null en cas d'échec
+     * Insère un abonnement pour une revue
+     * @param array|null $champs Données nécessaires à l'insertion de l'abonnement
+     * @return int|null 1 si l'insertion est réussie, null en cas d'échec
      */
     private function insertAbonnementRevue(?array $champs): ?int
     {
@@ -1290,9 +1306,9 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * Supprime l'abonnement d'une revue
-     * @param array|null $champs
-     * @return int|null Retourne 1 en cas de réussite, null en cas d'échec
+     * Supprime un abonnement associé à une revue
+     * @param array|null $champs Tableau contenant l'identifiant de l'abonnement
+     * @return int|null 1 si la suppression est réussie, null en cas d'échec
      */
     private function deleteAbonnementRevue(?array $champs): ?int
     {
@@ -1334,9 +1350,9 @@ class MyAccessBDD extends AccessBDD
     }
 
     /**
-     * Retourne les abonnements se terminant dans les 30 jours
-     * @param array|null $champs
-     * @return array|null liste des revues et dates de fin d'abonnement
+     * Récupère la liste des abonnements arrivant à expiration dans moins de 30 jours
+     * @param array|null $champs Paramètre non utilisé
+     * @return array|null Liste des revues et dates de fin d'abonnement
      */
     private function selectAbonnementsFinissant(?array $champs): ?array
     {
@@ -1349,13 +1365,18 @@ class MyAccessBDD extends AccessBDD
 
         return $this->conn->queryBDD($requete);
     }
-    
+
     /**
-     * Met à jour une ligne d'une table avec clé(s) composée(s)
+     * Met à jour un enregistrement d'une table possédant une clé composée.
+     * La requête UPDATE est construite dynamiquement à partir :
+     * - des colonnes composant la clé primaire (clause WHERE)
+     * - des champs à modifier (clause SET).
+     * Cette méthode permet de gérer les tables dont l'identification
+     * d'un enregistrement nécessite plusieurs colonnes.
      * @param string $nomTable Nom de la table à mettre à jour
-     * @param array $keys Tableau associatif des colonnes clés et de leurs valeurs (ex : ["id" => "123", "numero" => 1])
-     * @param array $updateFields  Tableau associatif des colonnes à mettre à jour et de leurs valeurs
-     * @return int|null 1 si succès, null sinon
+     * @param array $keys Tableau associatif des colonnes composant la clé (ex : ["id" => "123", "numero" => 1])
+     * @param array $updateFields  Tableau associatif des colonnes à modifier et de leurs valeurs
+     * @return int|null 1 si la mise à jour est réussie, null en cas d'échec
      */
     private function updateWithCompositeKey(string $nomTable, array $keys, array $updateFields): ?int
     {
@@ -1385,7 +1406,7 @@ class MyAccessBDD extends AccessBDD
         $sql = "UPDATE $nomTable SET $setSql WHERE $whereSql";
 
         try {
-            //Execution de la requête avec les parametres
+            //Exécution de la requête avec les parametres
             $result = $this->conn->queryBDD($sql, $parametres);
             if ($result !== null) {
                 return 1;
@@ -1399,9 +1420,12 @@ class MyAccessBDD extends AccessBDD
 
     /**
      * Met à jour l'état d'un exemplaire d'un document
+     *  Un exemplaire est identifié par une clé composée :
+     * - l'identifiant du document
+     * - le numéro d'exemplaire.
      * @param string|null $id Identifiant du document
-     * @param array|null $champs Tableau associatif contenant au minimum 'numero' et 'idEtat'
-     * @return int|null 1 si succès, null sinon
+     * @param array|null $champs Tableau contenant au minimum les champs 'numero' et 'idEtat'
+     * @return int|null 1 si la mise à jour est réussie, null en cas d'échec
      */
     private function updateExemplaireDocument(?string $id, ?array $champs): ?int
     {
@@ -1438,7 +1462,7 @@ class MyAccessBDD extends AccessBDD
                 return null;
             }
 
-            
+
             $this->conn->beginTransaction();
 
             // Mise à jour uniquement de l'état
@@ -1465,11 +1489,13 @@ class MyAccessBDD extends AccessBDD
             return null;
         }
     }
-    
+
     /**
-     * Supprime un exemplaire d'un document
+     * Supprime un exemplaire d'un document. L'exemplaire est identifié par une clé composée :
+     * - l'identifiant du document
+     * - le numéro d'exemplaire.
      * @param array|null $champs Tableau associatif contenant 'id' et 'numero'
-     * @return int|null 1 si succès, null sinon
+     * @return int|null 1 si la suppression est réussie, null en cas d'échec
      */
     private function deleteExemplaireDocument(?array $champs): ?int
     {
