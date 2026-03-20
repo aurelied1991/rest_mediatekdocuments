@@ -18,6 +18,7 @@ Pour tester l'API REST en local, voici le mode opératoire (similaire à celui d
    <li>Ouvrir l'API dans NetBeans pour pouvoir analyser le code et le faire évoluer suivant les besoins.</li>
    <li>Avant d'utiliser l'API, copier le fichier "exemple.env" et le renommer en ".env". Remplir ensuite les variables avec vos propres identifiants. Le fichier ".env" n'est pas suivi par GitHub pour des raisons de sécurité.
    <li>Adresse de l'API (en local) : http://localhost/rest_mediatekdocuments/ </li>
+   <li>Adresse de l'API (en ligne) : http://apirestmediatekdocuments.atwebpages.com/</li>
    <li>Pour tester l'API avec Postman, configurer l'authentification (onglet "Authorization", Type "Basic Auth"). Les identifiants (username et password) sont définis précédemment dans le fichier ".env"</li>
 </ul>
 
